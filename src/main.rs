@@ -42,8 +42,24 @@ impl Vec2f {
     }
 }
 
+#[derive(Debug, Copy, Clone, PartialEq)]
 struct Trail<const SIZE: usize> {
     trail: [[f32; SIZE]; SIZE],
+}
+
+impl<const SIZE: usize> Trail<SIZE> {
+    fn get_pos_wrapped(&self, pos: Vec2f) -> Vec2f {
+        let size_f = SIZE as f32;
+        let x = ( pos.x + size_f as f32 ) % size_f;
+        let y = ( pos.y + size_f as f32 ) % size_f;
+        return Vec2f { x: x, y: y }
+    }
+
+    fn get_val_wrapped(&self, pos: Vec2f) -> f32 {
+        let x = ( pos.x as usize + SIZE ) % SIZE;
+        let y = ( pos.y as usize + SIZE ) % SIZE;
+        return self.trail[x][y];
+    }
 }
 
 #[derive(Debug, PartialEq, Copy, Clone)]
@@ -74,9 +90,10 @@ impl Slime {
         };
     }
 
-    fn updated(&self, time: f32) -> Slime {
+    fn updated<const TRAIL_SIZE: usize>(&self, time: f32, trail: &Trail<TRAIL_SIZE>) -> Slime {
+        let new_pos = trail.get_pos_wrapped(self.pos + self.vel * time);
         return Slime {
-            pos: self.pos + self.vel * time,
+            pos: new_pos,
             vel: self.vel,
         };
     }
@@ -85,13 +102,9 @@ impl Slime {
         let l_vel = self.vel.rotated(-45.0_f32.to_radians());
         let r_vel = self.vel.rotated(45.0_f32.to_radians());
 
-        let f_coord = self.pos + self.vel;
-        let l_coord = self.pos + l_vel;
-        let r_coord = self.pos + r_vel;
-
-        let f_val = trail.trail[f_coord.x as usize][f_coord.y as usize];
-        let l_val = trail.trail[l_coord.x as usize][l_coord.y as usize];
-        let r_val = trail.trail[r_coord.x as usize][r_coord.y as usize];
+        let f_val = trail.get_val_wrapped(self.pos + self.vel);
+        let l_val = trail.get_val_wrapped(self.pos + l_vel);
+        let r_val = trail.get_val_wrapped(self.pos + r_vel);
 
         let vel = if f_val >= l_val {
             if f_val >= r_val {
@@ -124,9 +137,9 @@ impl<const SIZE: usize> Colony<SIZE> {
         return Colony { colony: colony };
     }
 
-    fn moved(&self, time: f32) -> Colony<SIZE> {
+    fn moved<const TRAIL_SIZE: usize>(&self, time: f32, trail: &Trail<TRAIL_SIZE>) -> Colony<SIZE> {
         return Colony {
-            colony: self.colony.map(|s| s.updated(time)),
+            colony: self.colony.map(|s| s.updated(time, trail)),
         };
     }
 
@@ -134,6 +147,16 @@ impl<const SIZE: usize> Colony<SIZE> {
         return Colony {
             colony: self.colony.map(|s| s.steered(trail)),
         };
+    }
+
+    fn deposit_on<const TRAIL_SIZE: usize>(&self, trail: &Trail<TRAIL_SIZE>) -> Trail<TRAIL_SIZE> {
+        let mut acc: Trail<TRAIL_SIZE> = (*trail).clone();
+        for slime in self.colony {
+            let x = slime.pos.x as usize;
+            let y = slime.pos.y as usize;
+            acc.trail[x][y] += 1.0;
+        }
+        return acc;
     }
 }
 
@@ -152,7 +175,8 @@ mod slime_tests {
     #[test]
     fn colony_update() {
         let colony = Slime::new().going(0.0, 1.0).as_colony();
-        let colony_updated = colony.moved(1.0);
+        let trail = new_3x3_trail();
+        let colony_updated = colony.moved(1.0, &trail);
         let expected = Slime::new().at(0.0, 1.0).going(0.0, 1.0).as_colony();
         assert_eq!(expected, colony_updated);
     }
@@ -160,7 +184,8 @@ mod slime_tests {
     #[test]
     fn colony_update_half() {
         let colony = Slime::new().going(1.0, 1.0).as_colony();
-        let colony_updated = colony.moved(0.5);
+        let trail = new_3x3_trail();
+        let colony_updated = colony.moved(0.5, &trail);
         let expected = Slime::new().at(0.5, 0.5).going(1.0, 1.0).as_colony();
         assert_eq!(expected, colony_updated);
     }
@@ -168,9 +193,7 @@ mod slime_tests {
     #[test]
     fn colony_steer_forward() {
         let colony = Slime::new().going(1.0, 1.0).as_colony();
-        let trail = Trail {
-            trail: [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]],
-        };
+        let trail = new_3x3_trail();
         let colony_updated = colony.steered(&trail);
         let expected = Slime::new().going(1.0, 1.0).as_colony();
         assert_eq!(expected, colony_updated);
@@ -197,4 +220,41 @@ mod slime_tests {
         let expected = Slime::new().going(0.0, 2.0_f32.sqrt()).as_colony();
         assert_eq!(expected, colony_updated);
     }
+
+    #[test]
+    fn test_wrap_steer() {
+        let colony = Slime::new().going(1.0, 1.0).as_colony();
+        let trail = Trail {
+            trail: [[0.0]],
+        };
+        let _ = colony.steered(&trail);
+    }
+
+    #[test]
+    fn test_deposit() {
+        let colony = Slime::new().at(1.0, 1.0).as_colony();
+        let trail = new_3x3_trail();
+        let trail_deposited = colony.deposit_on(&trail);
+        let expected = Trail {
+            trail: [[0.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 0.0]],
+        };
+        assert_eq!(expected, trail_deposited);
+    }
+
+    fn new_3x3_trail() -> Trail<3> {
+        return Trail {
+            trail: [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]],
+        };
+    }
+
+    #[test]
+    fn test_wrap_move() {
+        let colony = Slime::new().going(1.0, 1.0).as_colony();
+        let trail = Trail {
+            trail: [[0.0]],
+        };
+        let colony_moved = colony.moved(1.0, &trail);
+        let _ = colony_moved.deposit_on(&trail);
+    }
+
 }
