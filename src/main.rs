@@ -1,7 +1,73 @@
 use std::ops;
+use sdl2::pixels::Color;
+use sdl2::event::Event;
+use sdl2::keyboard::Keycode;
+use std::time::Duration;
+use rand::{Rng, rngs};
+use std::convert::TryInto;
 
-fn main() {
+
+fn main() -> Result<(), String> {
+
+    // SDL downloaded from: https://www.libsdl.org/download-2.0.php
+    // Following instructions from here: https://github.com/PistonDevelopers/piston-examples/issues/391#issuecomment-336219251
+    // So copying SDL2.dll and SDL2.lib into C:\Users\james\.rustup\toolchains\stable-x86_64-pc-windows-msvc\lib\rustlib\x86_64-pc-windows-msvc\lib
+    // and adding sdl2 = "0.32.1" to Cargo.toml
+
     println!("Hello, world!");
+    let mut trail: Box<Trail<1024>> = Box::new(Trail::new());
+    let mut colony: Colony<1024> = Colony::new_random(1024.0);
+
+    let sdl_context = sdl2::init()?;
+    let video_subsystem = sdl_context.video()?;
+    let window = video_subsystem.window("rust-sdl2 demo", 1024, 1024) 
+        .position_centered()
+        .build()
+        .expect("could not initialize video subsystem");
+
+    let mut canvas = window.into_canvas()
+        .build()
+        .expect("could not make a canvas");
+
+    canvas.set_draw_color(Color::RGB(0, 255, 255));
+    canvas.clear();
+    canvas.present();
+    let mut event_pump = sdl_context.event_pump()?;
+    let mut i = 0;
+
+    'running: loop {
+        colony = colony.steered(&trail).moved(0.1, &trail);
+        trail = colony.deposit_on(&trail);
+
+        i = (i + 1) % 255;
+        canvas.set_draw_color(Color::RGB(i, 64, 255 - i));
+        canvas.clear();
+        
+        for ( x, row ) in trail.trail.iter().enumerate() {
+            for ( y, value ) in row.iter().enumerate() {
+                let col = value.min(255.0) as u8;
+                canvas.set_draw_color(Color::RGB(col, col, col));
+                canvas.draw_point((x as i32, y as i32)).unwrap();
+            }
+        }
+
+
+        for event in event_pump.poll_iter() {
+            match event {
+                Event::Quit {..} |
+                Event::KeyDown { keycode: Some(Keycode::Escape), .. } => {
+                    break 'running;
+                },
+                _ => {}
+            }
+        }
+
+        canvas.present();
+
+        ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 60));
+    }
+
+    return Ok(());
 }
 
 #[derive(Debug, PartialEq, Copy, Clone)]
@@ -48,6 +114,12 @@ struct Trail<const SIZE: usize> {
 }
 
 impl<const SIZE: usize> Trail<SIZE> {
+    fn new() -> Trail<SIZE> {
+        return Trail {
+            trail: [[0.0; SIZE]; SIZE],
+        }
+    }
+
     fn get_pos_wrapped(&self, pos: Vec2f) -> Vec2f {
         let size_f = SIZE as f32;
         let x = ( pos.x + size_f as f32 ) % size_f;
@@ -149,14 +221,33 @@ impl<const SIZE: usize> Colony<SIZE> {
         };
     }
 
-    fn deposit_on<const TRAIL_SIZE: usize>(&self, trail: &Trail<TRAIL_SIZE>) -> Trail<TRAIL_SIZE> {
-        let mut acc: Trail<TRAIL_SIZE> = (*trail).clone();
+    fn deposit_on<const TRAIL_SIZE: usize>(&self, trail: &Trail<TRAIL_SIZE>) -> Box<Trail<TRAIL_SIZE>> {
+        let mut acc: Box<Trail<TRAIL_SIZE>> = Box::new((*trail).clone());
         for slime in self.colony {
             let x = slime.pos.x as usize;
             let y = slime.pos.y as usize;
             acc.trail[x][y] += 1.0;
         }
         return acc;
+    }
+
+    fn new_random(limit_xy: f32) -> Colony<SIZE> {
+        let mut vec: Vec<Slime> = vec![];
+        for _ in 0 .. SIZE {
+            let theta = rand::thread_rng().gen_range(0.0_f32 .. 360.0_f32).to_radians();
+            let vel = Vec2f { x: 1.0, y: 0.0 }.rotated(theta);
+            let rand_slime = Slime { 
+                pos: Vec2f { 
+                    x: rand::thread_rng().gen_range(0.0_f32 .. limit_xy),
+                    y: rand::thread_rng().gen_range(0.0_f32 .. limit_xy),
+                }, 
+                vel: vel 
+            };
+            vec.push(rand_slime);
+        }
+
+        let array: [Slime; SIZE] = vec.try_into().unwrap();
+        return Colony::new(array);
     }
 }
 
@@ -233,11 +324,11 @@ mod slime_tests {
     #[test]
     fn test_deposit() {
         let colony = Slime::new().at(1.0, 1.0).as_colony();
-        let trail = new_3x3_trail();
+        let trail = Box::new(new_3x3_trail());
         let trail_deposited = colony.deposit_on(&trail);
-        let expected = Trail {
+        let expected = Box::new(Trail {
             trail: [[0.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 0.0]],
-        };
+        });
         assert_eq!(expected, trail_deposited);
     }
 
