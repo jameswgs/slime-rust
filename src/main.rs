@@ -272,7 +272,7 @@ mod slime_tests {
     #[test]
     fn colony_update() {
         let colony = Slime::new().going(0.0, 1.0).as_colony();
-        let trail = new_3x3_trail();
+        let trail = Trail::<3>::new();
         let colony_updated = colony.moved(1.0, &trail);
         let expected = Slime::new().at(0.0, 1.0).going(0.0, 1.0).as_colony();
         assert_eq!(expected, colony_updated);
@@ -281,7 +281,7 @@ mod slime_tests {
     #[test]
     fn colony_update_half() {
         let colony = Slime::new().going(1.0, 1.0).as_colony();
-        let trail = new_3x3_trail();
+        let trail = Trail::<3>::new();
         let colony_updated = colony.moved(0.5, &trail);
         let expected = Slime::new().at(0.5, 0.5).going(1.0, 1.0).as_colony();
         assert_eq!(expected, colony_updated);
@@ -290,7 +290,7 @@ mod slime_tests {
     #[test]
     fn colony_steer_forward() {
         let colony = Slime::new().going(1.0, 1.0).as_colony();
-        let trail = new_3x3_trail();
+        let trail = Trail::<3>::new();
         let colony_updated = colony.steered(&trail);
         let expected = Slime::new().going(1.0, 1.0).as_colony();
         assert_eq!(expected, colony_updated);
@@ -299,7 +299,7 @@ mod slime_tests {
     #[test]
     fn colony_steer_right() {
         let colony = Slime::new().going(1.0, 1.0).as_colony();
-        let trail: Trail<3> = Trail::new().set(0, 1, 0.1);
+        let trail = Trail::<3>::new().set(0, 1, 0.1);
         let colony_updated = colony.steered(&trail);
         let expected = Slime::new().going( 0.0, 2.0_f32.sqrt()).as_colony();
         assert_eq!(expected, colony_updated);
@@ -308,7 +308,7 @@ mod slime_tests {
     #[test]
     fn colony_steer_left() {
         let colony = Slime::new().going(1.0, 1.0).as_colony();
-        let trail: Trail<3> = Trail::new().set(1, 0, 0.1);
+        let trail = Trail::<3>::new().set(1, 0, 0.1);
         let colony_updated = colony.steered(&trail);
         let expected = Slime::new().going(2.0_f32.sqrt(), 0.0).as_colony();
         assert_eq!(expected, colony_updated);
@@ -326,14 +326,10 @@ mod slime_tests {
     #[test]
     fn test_deposit() {
         let colony = Slime::new().at(1.0, 1.0).as_colony();
-        let trail = new_3x3_trail();
+        let trail = Trail::new();
         let trail_deposited = colony.deposit_on(&trail);
         let expected: Trail<3> = Trail::new().set(1, 1, 1.0);
         assert_eq!(expected, trail_deposited);
-    }
-
-    fn new_3x3_trail() -> Trail<3> {
-        return Trail::new();
     }
 
     #[test]
