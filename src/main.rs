@@ -15,57 +15,58 @@ fn main() -> Result<(), String> {
     // and adding sdl2 = "0.32.1" to Cargo.toml
 
     println!("Hello, world!");
-    let mut trail: Box<Trail<1024>> = Box::new(Trail::new());
-    let mut colony: Colony<1024> = Colony::new_random(1024.0);
 
-    let sdl_context = sdl2::init()?;
-    let video_subsystem = sdl_context.video()?;
-    let window = video_subsystem.window("rust-sdl2 demo", 1024, 1024) 
-        .position_centered()
-        .build()
-        .expect("could not initialize video subsystem");
+    let mut trail: Trail<1024> = Trail::new();
+    // let mut colony: Colony<1024> = Colony::new_random(1024.0);
 
-    let mut canvas = window.into_canvas()
-        .build()
-        .expect("could not make a canvas");
+    // let sdl_context = sdl2::init()?;
+    // let video_subsystem = sdl_context.video()?;
+    // let window = video_subsystem.window("rust-sdl2 demo", 1024, 1024) 
+    //     .position_centered()
+    //     .build()
+    //     .expect("could not initialize video subsystem");
 
-    canvas.set_draw_color(Color::RGB(0, 255, 255));
-    canvas.clear();
-    canvas.present();
-    let mut event_pump = sdl_context.event_pump()?;
-    let mut i = 0;
+    // let mut canvas = window.into_canvas()
+    //     .build()
+    //     .expect("could not make a canvas");
 
-    'running: loop {
-        colony = colony.steered(&trail).moved(0.1, &trail);
-        trail = colony.deposit_on(&trail);
+    // canvas.set_draw_color(Color::RGB(0, 255, 255));
+    // canvas.clear();
+    // canvas.present();
+    // let mut event_pump = sdl_context.event_pump()?;
+    // let mut i = 0;
 
-        i = (i + 1) % 255;
-        canvas.set_draw_color(Color::RGB(i, 64, 255 - i));
-        canvas.clear();
+    // 'running: loop {
+    //     colony = colony.steered(&trail).moved(0.1, &trail);
+    //     trail = colony.deposit_on(&trail);
+
+    //     i = (i + 1) % 255;
+    //     canvas.set_draw_color(Color::RGB(i, 64, 255 - i));
+    //     canvas.clear();
         
-        for ( x, row ) in trail.trail.iter().enumerate() {
-            for ( y, value ) in row.iter().enumerate() {
-                let col = value.min(255.0) as u8;
-                canvas.set_draw_color(Color::RGB(col, col, col));
-                canvas.draw_point((x as i32, y as i32)).unwrap();
-            }
-        }
+    //     for ( x, row ) in trail.trail.iter().enumerate() {
+    //         for ( y, value ) in row.iter().enumerate() {
+    //             let col = value.min(255.0) as u8;
+    //             canvas.set_draw_color(Color::RGB(col, col, col));
+    //             canvas.draw_point((x as i32, y as i32)).unwrap();
+    //         }
+    //     }
 
 
-        for event in event_pump.poll_iter() {
-            match event {
-                Event::Quit {..} |
-                Event::KeyDown { keycode: Some(Keycode::Escape), .. } => {
-                    break 'running;
-                },
-                _ => {}
-            }
-        }
+    //     for event in event_pump.poll_iter() {
+    //         match event {
+    //             Event::Quit {..} |
+    //             Event::KeyDown { keycode: Some(Keycode::Escape), .. } => {
+    //                 break 'running;
+    //             },
+    //             _ => {}
+    //         }
+    //     }
 
-        canvas.present();
+    //     canvas.present();
 
-        ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 60));
-    }
+    //     ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 60));
+    // }
 
     return Ok(());
 }
@@ -108,16 +109,21 @@ impl Vec2f {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 struct Trail<const SIZE: usize> {
-    trail: [[f32; SIZE]; SIZE],
+    trail: Vec<f32>,
 }
 
 impl<const SIZE: usize> Trail<SIZE> {
     fn new() -> Trail<SIZE> {
         return Trail {
-            trail: [[0.0; SIZE]; SIZE],
+            trail: vec![0.0_f32; SIZE*SIZE],
         }
+    }
+
+    fn set(mut self, x: usize, y: usize, val: f32) -> Trail<SIZE> {
+        self.trail[x+y*SIZE] = val;
+        return self;
     }
 
     fn get_pos_wrapped(&self, pos: Vec2f) -> Vec2f {
@@ -130,7 +136,7 @@ impl<const SIZE: usize> Trail<SIZE> {
     fn get_val_wrapped(&self, pos: Vec2f) -> f32 {
         let x = ( pos.x as usize + SIZE ) % SIZE;
         let y = ( pos.y as usize + SIZE ) % SIZE;
-        return self.trail[x][y];
+        return self.trail[x+y*SIZE];
     }
 }
 
@@ -221,12 +227,12 @@ impl<const SIZE: usize> Colony<SIZE> {
         };
     }
 
-    fn deposit_on<const TRAIL_SIZE: usize>(&self, trail: &Trail<TRAIL_SIZE>) -> Box<Trail<TRAIL_SIZE>> {
-        let mut acc: Box<Trail<TRAIL_SIZE>> = Box::new((*trail).clone());
+    fn deposit_on<const TRAIL_SIZE: usize>(&self, trail: &Trail<TRAIL_SIZE>) -> Trail<TRAIL_SIZE> {
+        let mut acc: Trail<TRAIL_SIZE> = (*trail).clone();
         for slime in self.colony {
             let x = slime.pos.x as usize;
             let y = slime.pos.y as usize;
-            acc.trail[x][y] += 1.0;
+            acc.trail[x+y*TRAIL_SIZE] += 1.0;
         }
         return acc;
     }
@@ -291,32 +297,28 @@ mod slime_tests {
     }
 
     #[test]
+    fn colony_steer_right() {
+        let colony = Slime::new().going(1.0, 1.0).as_colony();
+        let trail: Trail<3> = Trail::new().set(0, 1, 0.1);
+        let colony_updated = colony.steered(&trail);
+        let expected = Slime::new().going( 0.0, 2.0_f32.sqrt()).as_colony();
+        assert_eq!(expected, colony_updated);
+    }
+
+    #[test]
     fn colony_steer_left() {
         let colony = Slime::new().going(1.0, 1.0).as_colony();
-        let trail = Trail {
-            trail: [[0.0, 0.0, 0.0], [0.1, 0.0, 0.0], [0.0, 0.0, 0.0]],
-        };
+        let trail: Trail<3> = Trail::new().set(1, 0, 0.1);
         let colony_updated = colony.steered(&trail);
         let expected = Slime::new().going(2.0_f32.sqrt(), 0.0).as_colony();
         assert_eq!(expected, colony_updated);
     }
 
     #[test]
-    fn colony_steer_right() {
-        let colony = Slime::new().going(1.0, 1.0).as_colony();
-        let trail = Trail {
-            trail: [[0.0, 0.1, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]],
-        };
-        let colony_updated = colony.steered(&trail);
-        let expected = Slime::new().going(0.0, 2.0_f32.sqrt()).as_colony();
-        assert_eq!(expected, colony_updated);
-    }
-
-    #[test]
     fn test_wrap_steer() {
         let colony = Slime::new().going(1.0, 1.0).as_colony();
-        let trail = Trail {
-            trail: [[0.0]],
+        let trail: Trail<1> = Trail {
+            trail: vec![0.0],
         };
         let _ = colony.steered(&trail);
     }
@@ -324,28 +326,29 @@ mod slime_tests {
     #[test]
     fn test_deposit() {
         let colony = Slime::new().at(1.0, 1.0).as_colony();
-        let trail = Box::new(new_3x3_trail());
+        let trail = new_3x3_trail();
         let trail_deposited = colony.deposit_on(&trail);
-        let expected = Box::new(Trail {
-            trail: [[0.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 0.0]],
-        });
+        let expected: Trail<3> = Trail::new().set(1, 1, 1.0);
         assert_eq!(expected, trail_deposited);
     }
 
     fn new_3x3_trail() -> Trail<3> {
-        return Trail {
-            trail: [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]],
-        };
+        return Trail::new();
     }
 
     #[test]
     fn test_wrap_move() {
         let colony = Slime::new().going(1.0, 1.0).as_colony();
-        let trail = Trail {
-            trail: [[0.0]],
+        let trail: Trail<1> = Trail {
+            trail: vec![0.0],
         };
         let colony_moved = colony.moved(1.0, &trail);
         let _ = colony_moved.deposit_on(&trail);
+    }
+
+    #[test]
+    fn test_large_trail() {
+        let mut trail: Trail<1024> = Trail::new();
     }
 
 }
