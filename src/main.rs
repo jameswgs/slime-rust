@@ -16,57 +16,57 @@ fn main() -> Result<(), String> {
 
     println!("Hello, world!");
 
-    let mut trail: Trail<1024> = Trail::new();
-    // let mut colony: Colony<1024> = Colony::new_random(1024.0);
+    let mut trail: Trail<512> = Trail::new();
+    let mut colony: Colony<2048> = Colony::new_random(1024.0);
 
-    // let sdl_context = sdl2::init()?;
-    // let video_subsystem = sdl_context.video()?;
-    // let window = video_subsystem.window("rust-sdl2 demo", 1024, 1024) 
-    //     .position_centered()
-    //     .build()
-    //     .expect("could not initialize video subsystem");
+    let sdl_context = sdl2::init()?;
+    let video_subsystem = sdl_context.video()?;
+    let window = video_subsystem.window("Rust Slime!", 1024, 1024) 
+        .position_centered()
+        .build()
+        .expect("could not initialize video subsystem");
 
-    // let mut canvas = window.into_canvas()
-    //     .build()
-    //     .expect("could not make a canvas");
+    let mut canvas = window.into_canvas()
+        .build()
+        .expect("could not make a canvas");
 
-    // canvas.set_draw_color(Color::RGB(0, 255, 255));
-    // canvas.clear();
-    // canvas.present();
-    // let mut event_pump = sdl_context.event_pump()?;
-    // let mut i = 0;
+    canvas.set_draw_color(Color::RGB(0, 255, 255));
+    canvas.clear();
+    canvas.present();
+    let mut event_pump = sdl_context.event_pump()?;
+    let mut i = 0;
 
-    // 'running: loop {
-    //     colony = colony.steered(&trail).moved(0.1, &trail);
-    //     trail = colony.deposit_on(&trail);
+    'running: loop {
+        colony = colony.steered(&trail).moved(1.0, &trail);
+        colony.deposit_on(&mut trail);
 
-    //     i = (i + 1) % 255;
-    //     canvas.set_draw_color(Color::RGB(i, 64, 255 - i));
-    //     canvas.clear();
-        
-    //     for ( x, row ) in trail.trail.iter().enumerate() {
-    //         for ( y, value ) in row.iter().enumerate() {
-    //             let col = value.min(255.0) as u8;
-    //             canvas.set_draw_color(Color::RGB(col, col, col));
-    //             canvas.draw_point((x as i32, y as i32)).unwrap();
-    //         }
-    //     }
+        i = (i + 1) % 255;
+        canvas.set_draw_color(Color::RGB(i, 64, 255 - i));
+        canvas.clear();
 
+        for y in 0 .. trail.get_height() {
+            for  x in 0 .. trail.get_width() {
+                let value = trail.get_value(x, y) * 32.0;
+                let col = value.min(255.0) as u8;
+                canvas.set_draw_color(Color::RGB(col, col, col));
+                canvas.draw_point((x as i32, y as i32)).unwrap();
+            }
+        }
 
-    //     for event in event_pump.poll_iter() {
-    //         match event {
-    //             Event::Quit {..} |
-    //             Event::KeyDown { keycode: Some(Keycode::Escape), .. } => {
-    //                 break 'running;
-    //             },
-    //             _ => {}
-    //         }
-    //     }
+        for event in event_pump.poll_iter() {
+            match event {
+                Event::Quit {..} |
+                Event::KeyDown { keycode: Some(Keycode::Escape), .. } => {
+                    break 'running;
+                },
+                _ => {}
+            }
+        }
 
-    //     canvas.present();
+        canvas.present();
 
-    //     ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 60));
-    // }
+        // ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 60));
+    }
 
     return Ok(());
 }
@@ -121,9 +121,21 @@ impl<const SIZE: usize> Trail<SIZE> {
         }
     }
 
+    fn get_width(&self) -> usize {
+        return SIZE;
+    }
+
+    fn get_height(&self) -> usize {
+        return SIZE;
+    }
+
     fn set(mut self, x: usize, y: usize, val: f32) -> Trail<SIZE> {
         self.trail[x+y*SIZE] = val;
         return self;
+    }
+
+    fn get_value(&self, x: usize, y: usize) -> f32 {
+        return self.trail[x+y*SIZE];
     }
 
     fn get_pos_wrapped(&self, pos: Vec2f) -> Vec2f {
@@ -227,14 +239,12 @@ impl<const SIZE: usize> Colony<SIZE> {
         };
     }
 
-    fn deposit_on<const TRAIL_SIZE: usize>(&self, trail: &Trail<TRAIL_SIZE>) -> Trail<TRAIL_SIZE> {
-        let mut acc: Trail<TRAIL_SIZE> = (*trail).clone();
+    fn deposit_on<const TRAIL_SIZE: usize>(&self, trail: &mut Trail<TRAIL_SIZE>) {
         for slime in self.colony {
             let x = slime.pos.x as usize;
             let y = slime.pos.y as usize;
-            acc.trail[x+y*TRAIL_SIZE] += 1.0;
+            trail.trail[x+y*TRAIL_SIZE] += 1.0;
         }
-        return acc;
     }
 
     fn new_random(limit_xy: f32) -> Colony<SIZE> {
@@ -327,7 +337,8 @@ mod slime_tests {
     fn test_deposit() {
         let colony = Slime::new().at(1.0, 1.0).as_colony();
         let trail = Trail::new();
-        let trail_deposited = colony.deposit_on(&trail);
+        let mut trail_deposited = trail.clone();
+        colony.deposit_on(&mut trail_deposited);
         let expected: Trail<3> = Trail::new().set(1, 1, 1.0);
         assert_eq!(expected, trail_deposited);
     }
@@ -339,7 +350,7 @@ mod slime_tests {
             trail: vec![0.0],
         };
         let colony_moved = colony.moved(1.0, &trail);
-        let _ = colony_moved.deposit_on(&trail);
+        let _ = colony_moved.deposit_on(&mut trail);
     }
 
     #[test]
